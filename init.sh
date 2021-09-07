@@ -12,6 +12,8 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
+code .
+
 # If command passed as argument, run it
 if [ "$1" ]; then
     $@
