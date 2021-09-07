@@ -27,8 +27,11 @@ class Braid(object):
             """
             Setup before request function
             """
-            print("before_request", file=sys.stdout)
-            print(request, file=sys.stdout)
+            # Get Braid metadata from headers
+            version = request.headers.get('version')
+            parents = request.headers.get('parents')
+            peer = request.headers.get('peer')
+            subscribe = request.headers.get('subscribe', False)
         self.app.before_request(before_request)
     
     def setup_after_request(self):
@@ -39,7 +42,15 @@ class Braid(object):
             """
             Setup after request function
             """
-            print("after_request", file=sys.stdout)
-            print(request, file=sys.stdout)
+            # Setup patching and JSON ranges headers
+            response.headers['Range-Request-Allow-Methods'] = 'PATCH, PUT'
+            response.headers['Range-Request-Allow-Units'] = 'json'
+            response.headers['Patches'] = 'OK'
             return response
         self.app.after_request(after_request)
+    
+    def generate_patch(self):
+        """
+        Generate patch
+        """
+        pass
