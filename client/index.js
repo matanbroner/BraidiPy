@@ -8,6 +8,7 @@ let braidify = require("braidify").http(http);
 
 // Not doing anything useful, just testing incoming versions can be parsed
 braidify.get("http://localhost:8080/stream", { subscribe: true }, (res) => {
+  console.log(res.headers);
   res.on("error", (err) => {
     console.error(err);
   });

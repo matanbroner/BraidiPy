@@ -10,7 +10,18 @@ from core import Patch, generate_patch_stream_string
 
 # Create Flask app
 app = Flask(__name__)
-# Braid(app)
+Braid(app)
+
+posts = {
+    '1': {
+        'title': 'Hello World',
+        'body': 'This is the first post',
+    },
+    '2': {
+        'title': 'Hello World 2',
+        'body': 'This is the second post',
+    }
+}
 
 # Create heartbeat route
 @app.route('/heartbeat', methods=['GET'])
@@ -20,22 +31,15 @@ def heartbeat():
     """
     return 'OK'
 
-@app.route('/stream', methods=['GET'])
-def stream():
+@app.route('/post/<id>', methods=['GET'])
+def get_post(id: str):
     """
-    Stream route
+    Tests Braid subscriptions on sample Posts resource
     """
-    patch = Patch("json", ".latest_change", "{\"data\": 100}")
-    data = generate_patch_stream_string(patch)
-    def gen():
-        try:
-            while True:
-                yield data
-                time.sleep(1)
-        except GeneratorExit:
-            print('closed', file=sys.stdout)
-
-    return Response(stream_with_context(gen()))
+    # return current version of resouce, Braid has no
+    # way of knowing how to fetch it. 
+    # TODO: implement an optional way for Braid to fetch resource
+    return
 
 
 # Run Flask app
