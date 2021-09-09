@@ -6,7 +6,7 @@ import time
 from flask import Flask, request, Response, stream_with_context
 from werkzeug.serving import WSGIRequestHandler
 from braid import Braid
-from core import Patch, random_patch_string
+from core import Patch, generate_patch_stream_string
 
 # Create Flask app
 app = Flask(__name__)
@@ -25,11 +25,11 @@ def stream():
     """
     Stream route
     """
-    data = random_patch_string()
+    patch = Patch("json", ".latest_change", "{\"data\": 100}")
+    data = generate_patch_stream_string(patch)
     def gen():
         try:
             while True:
-                print(data)
                 yield data
                 time.sleep(1)
         except GeneratorExit:

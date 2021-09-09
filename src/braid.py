@@ -5,6 +5,7 @@ Wraps Python application object to inject lifecyle methods
 
 import sys
 from flask import request
+from core import is_true
 
 class Braid(object):
     
@@ -27,11 +28,18 @@ class Braid(object):
             """
             Setup before request function
             """
+            url = request.url
             # Get Braid metadata from headers
             version = request.headers.get('version')
             parents = request.headers.get('parents')
             peer = request.headers.get('peer')
-            subscribe = request.headers.get('subscribe', False)
+            subscribe = is_true(request.headers.get('subscribe', False))
+
+            # Set variables as Request attributes
+            setattr(request, 'version', version)
+            setattr(request, 'parents', parents)
+            setattr(request, 'peer', peer)
+            setattr(request, 'subscribe', subscribe)
         self.app.before_request(before_request)
     
     def setup_after_request(self):
@@ -49,8 +57,9 @@ class Braid(object):
             return response
         self.app.after_request(after_request)
     
-    def generate_patch(self):
+    def send_version(self, data):
         """
-        Generate patch
+        Send version
         """
-        pass
+        url = request.url
+        peer = request.peer
