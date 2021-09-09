@@ -4,6 +4,7 @@ Wraps Python application object to inject lifecyle methods
 """
 
 import sys
+import json
 from flask import request, Response
 from core import Subscription, is_true, subscriber_id, generate_patch_stream_string
 
@@ -24,6 +25,7 @@ class Braid(object):
     def setup_before_request(self):
         """
         Setup before request function
+        Assumes GET request
         """
         def before_request():
             """
@@ -41,7 +43,7 @@ class Braid(object):
             setattr(request, 'parents', parents)
             setattr(request, 'peer', peer)
             setattr(request, 'subscribe', subscribe)
-            setattr(request, 'version_response', version_response)
+            setattr(request, 'version_response', self.version_response)
             if request.subscribe:
                 # Store new subscription
                 subscription = Subscription(request)
@@ -51,16 +53,18 @@ class Braid(object):
     def setup_after_request(self):
         """
         Setup after request function
+        Assumes GET request
         """
         def after_request(response):
             """
             Setup after request function
             """
+            print("after_request")
             # Setup patching and JSON ranges headers
             response.headers['Range-Request-Allow-Methods'] = 'PATCH, PUT'
             response.headers['Range-Request-Allow-Units'] = 'json'
             response.headers['Patches'] = 'OK'
-            if(request.subscribe):
+            if(response.status_code == 200 and request.subscribe):
                 # Store new subscription
                 subscription = self.subscriptions[subscriber_id(request)]
                 return subscription.patch_stream()
@@ -82,11 +86,15 @@ class Braid(object):
         stream_data = ""
         response = Response("", status=200)
         def set_header(header, value):
+            nonlocal stream_data
+            nonlocal response
             if request.subscribe:
                 stream_data += "{}: {}\r\n".format(header, value)
             else:
                 response.headers[header] = value
         def write_response(data):
+            nonlocal stream_data
+            nonlocal response
             if request.subscribe:
                 stream_data += data
             else:
@@ -95,14 +103,16 @@ class Braid(object):
         for header, value in data.items():
             if isinstance(value, list):
                 value = ",".join(value)
+            elif isinstance(value, dict):
+                value = json.dumps(value)
             else:
                 value = str(value)
             set_header(header, value)
 
-        if data["patches"]:
+        if data.get("patches", None):
             patches = generate_patch_stream_string(data["patches"])
             write_response(patches)
-        elif data["body"]:
+        elif data.get("body"):
             set_header("Content-Length", len(data["body"]))
             write_response("\r\n{}\r\n".format(data["body"]))
         else:

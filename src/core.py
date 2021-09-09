@@ -1,4 +1,4 @@
-from flask import Response
+from flask import Response, stream_with_context
 from typing import NamedTuple
 from textwrap import dedent
 
@@ -47,13 +47,13 @@ class Subscription:
             except GeneratorExit:
                 print('stream_closed', file=sys.stdout)
 
-        return Response(stream_with_context(gen()))
+        return Response(stream_with_context(stream()))
     
     def push_to_stream(self, data: str):
         """
         Queue string data to be streamed to the client
         """
-        self.send_queue.append(queue_stream_data)
+        self.send_queue.append(data)
     
     def close(self):
         """
@@ -91,4 +91,4 @@ def subscriber_id(request) -> str:
     Hashes Flask request object remote_address as a subscriber ID
     TODO: make this more robust to avoid collisions
     """
-    return hash(request.remote_addr)
+    return hash((request.remote_addr, request.path))

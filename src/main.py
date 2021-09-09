@@ -39,7 +39,14 @@ def get_post(id: str):
     # return current version of resouce, Braid has no
     # way of knowing how to fetch it. 
     # TODO: implement an optional way for Braid to fetch resource
-    return
+    version = request.version_response({
+        "version": len(posts.keys()),
+        "body": posts[id]
+    })
+    # TODO: find a better way to do this
+    # The user should not be tasked with returning a version
+    if not request.subscribe:
+        return version
 
 
 # Run Flask app
