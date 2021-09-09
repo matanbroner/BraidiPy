@@ -3,7 +3,7 @@ A simple implementation of <a href="https://braid.org/">Braid</a> for HTTP state
 
 ## Status and Stability
 <p>
-    <b>[09/07/2021]</b>
+    <b>[09/07/2021]</b></br>
     Repository created, research phase beginning.
 </p>
 <p>
