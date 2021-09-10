@@ -11,6 +11,7 @@ from core import (
     is_true,
     subscriber_id,
     generate_patch_stream_string,
+    parse_patches,
     generate_articial_subscription_data,
 )
 
@@ -51,26 +52,31 @@ class Braid(object):
             setattr(request, "peer", peer)
             setattr(request, "subscribe", subscribe)
             setattr(request, "updated_version_response", self.updated_version_response)
-            if request.subscribe:
-                # Store new subscription
-                s_id = subscriber_id(request)
-                subscription = Subscription(
-                    request, lambda: self.subscriptions.pop(s_id)
-                )
-                # TODO: delete this call, only for testing
-                # generate_articial_subscription_data(subscription)
-                if s_id in self.subscriptions:
-                    # Kill existing subscription and replace with new one
-                    print(
-                        "Warning: Subscription already exists for {}".format(s_id),
-                        file=sys.stderr,
+            if request.method == "GET":
+                if request.subscribe:
+                    # Store new subscription
+                    s_id = subscriber_id(request)
+                    subscription = Subscription(
+                        request, lambda: self.subscriptions.pop(s_id)
                     )
-                    self.subscriptions[s_id].close()
-                else:
-                    # Kill existing subscription and replace with new one
-                    print("Subscription created for {}".format(s_id), file=sys.stderr)
-                self.subscriptions[s_id] = subscription
-                setattr(request, "subscription_stream", subscription.patch_stream)
+                    # TODO: delete this call, only for testing
+                    # generate_articial_subscription_data(subscription)
+                    if s_id in self.subscriptions:
+                        # Kill existing subscription and replace with new one
+                        print(
+                            "Warning: Subscription already exists for {}".format(s_id),
+                            file=sys.stderr,
+                        )
+                        self.subscriptions[s_id].close()
+                    else:
+                        # Kill existing subscription and replace with new one
+                        print("Subscription created for {}".format(s_id), file=sys.stderr)
+                    self.subscriptions[s_id] = subscription
+                    setattr(request, "subscription_stream", subscription.patch_stream)
+            elif request.method == "PUT":
+                patches = parse_patches()
+                # placeholder
+                setattr(request, "patches", patches)
 
         self.app.before_request(before_request)
 
@@ -88,6 +94,9 @@ class Braid(object):
             response.headers["Range-Request-Allow-Methods"] = "PATCH, PUT"
             response.headers["Range-Request-Allow-Units"] = "json"
             response.headers["Patches"] = "OK"
+            # for a new subscription only
+            if request.subscribe and request.method == "GET":
+                response.status_code = 209
             # TODO: figure out if Braid should automatically overwrite
             # a response when subscribe=True
             # How much abstraction is needed here?
@@ -162,3 +171,7 @@ class Braid(object):
             return None
         else:
             return response
+
+
+            
+        

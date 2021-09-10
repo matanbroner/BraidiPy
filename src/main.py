@@ -53,6 +53,14 @@ def get_post(id: str):
     else:
         return version
 
+@app.route('/post/<id>', methods=['PUT'])
+def put_post(id: str):
+    """
+    Tests Braid patching (ie. PUT) on sample Posts resource
+    """
+    print(request.patches)
+    return Response(status=200)
+
 
 # Run Flask app
 if __name__ == '__main__':
