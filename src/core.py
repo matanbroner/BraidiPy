@@ -46,11 +46,10 @@ class Subscription:
                         data = self.send_queue.pop(0)
                         yield data
                 # Exception thrown when client disconnects
+                # NOTE: the generator will never terminate until
+                # the client disconnects and a yield is invoked
             except GeneratorExit:
-                print('stream_closed', file=sys.stdout)
-                self.active = False
-                self.closed_cb()
-
+                self.close()
         return Response(stream_with_context(stream()))
     
     def push_to_stream(self, data: str):
@@ -63,7 +62,9 @@ class Subscription:
         """
         Close the stream
         """
+        print('stream_closed', file=sys.stdout)
         self.active = False
+        self.closed_cb()
 
 # Util functions
 def generate_patch_stream_string(patches: list) -> str:
@@ -96,3 +97,22 @@ def subscriber_id(request) -> str:
     TODO: make this more robust to avoid collisions
     """
     return hash((request.remote_addr, request.path))
+
+"""
+Temporary functions for testing
+Should not be included in production code
+"""
+import threading, time
+def generate_articial_subscription_data(subscription):
+    """
+    Generate artificial data to be streamed to the client
+    """
+    patch = Patch("json", ".latest_change", "{\"data\": 100}")
+    patches = [patch for _ in range(1)]
+    sample_data = generate_patch_stream_string(patches)
+    def gen_data():
+        while subscription.active:
+            time.sleep(1)
+            subscription.push_to_stream(sample_data)
+    thread = threading.Thread(target=gen_data)
+    thread.start()
