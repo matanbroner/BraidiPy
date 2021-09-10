@@ -36,16 +36,21 @@ def get_post(id: str):
     """
     Tests Braid subscriptions on sample Posts resource
     """
+    # Middleware will have set up a subscription for this request + user
+
     # return current version of resouce, Braid has no
     # way of knowing how to fetch it. 
     # TODO: implement an optional way for Braid to fetch resource
-    version = request.version_response({
+    version = request.updated_version_response({
         "version": len(posts.keys()),
         "body": posts[id]
     })
     # TODO: find a better way to do this
     # The user should not be tasked with returning a version
-    if not request.subscribe:
+    if request.subscribe:
+        # version is None, stream returns a custom Response
+        return request.subscription_stream()
+    else:
         return version
 
 

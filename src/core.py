@@ -1,3 +1,4 @@
+import sys
 from flask import Response, stream_with_context
 from typing import NamedTuple
 from textwrap import dedent
@@ -22,20 +23,21 @@ class Patch(NamedTuple):
         return f"<Patch {self}>"
 
 class Subscription:
-    def __init__(self, request):
+    def __init__(self, request, closed_cb):
         self.path = request.path
         self.send_queue = []
         self.active = True
+        self.closed_cb = closed_cb
     
     def patch_stream(self):
         """
         Generator method to send patches
         """
         # Artificially add data to queue
-        patch = Patch("json", ".latest_change", "{\"data\": 100}")
-        patches = [patch for _ in range(10)]
-        sample_data = generate_patch_stream_string(patches)
-        self.push_to_stream(sample_data)
+        # patch = Patch("json", ".latest_change", "{\"data\": 100}")
+        # patches = [patch for _ in range(10)]
+        # sample_data = generate_patch_stream_string(patches)
+        # self.push_to_stream(sample_data)
         def stream():
             try:
                 # While client connected
@@ -46,6 +48,8 @@ class Subscription:
                 # Exception thrown when client disconnects
             except GeneratorExit:
                 print('stream_closed', file=sys.stdout)
+                self.active = False
+                self.closed_cb()
 
         return Response(stream_with_context(stream()))
     

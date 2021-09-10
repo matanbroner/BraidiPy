@@ -43,11 +43,19 @@ class Braid(object):
             setattr(request, 'parents', parents)
             setattr(request, 'peer', peer)
             setattr(request, 'subscribe', subscribe)
-            setattr(request, 'version_response', self.version_response)
+            setattr(request, 'updated_version_response', self.updated_version_response)
             if request.subscribe:
                 # Store new subscription
-                subscription = Subscription(request)
-                self.subscriptions[subscriber_id(request)] = subscription
+                s_id = subscriber_id(request)
+                if s_id not in self.subscriptions:
+                    print("New subscription: {}".format(s_id))
+                    subscription = Subscription(request, lambda: self.subscriptions.pop(s_id))
+                    self.subscriptions[s_id] = subscription
+                else:
+                    print("Subscription already exists: {}".format(s_id))
+                    subscription = self.subscriptions[s_id]
+                setattr(request, 'subscription_stream', subscription.patch_stream)
+                print(len(self.subscriptions))
         self.app.before_request(before_request)
     
     def setup_after_request(self):
@@ -59,28 +67,33 @@ class Braid(object):
             """
             Setup after request function
             """
-            print("after_request")
             # Setup patching and JSON ranges headers
             response.headers['Range-Request-Allow-Methods'] = 'PATCH, PUT'
             response.headers['Range-Request-Allow-Units'] = 'json'
             response.headers['Patches'] = 'OK'
-            if(response.status_code == 200 and request.subscribe):
-                # Store new subscription
-                subscription = self.subscriptions[subscriber_id(request)]
-                return subscription.patch_stream()
-            else:
-                # TODO: deal with non-subscribe requests
-                # Send only one version
-                return response
+            # TODO: figure out if Braid should automatically overwrite
+            # a response when subscribe=True
+            # How much abstraction is needed here?
+            return response
             
         self.app.after_request(after_request)
     
-    def version_response(self, data):
+    def updated_version_response(self, data):
         """
-        Sends version
+        Returns an updated version of resource
         Depending on if request is a subscription request, either
-        static Response is sent or existing subscription will queue initial
+        static Response is returned or existing subscription will queue initial
         version to yield.
+        Accepts:
+            data: dict
+                Keys:
+                    version: str
+                    parents: list[Patch]
+                    peer: str 
+                    patches: list[Patch]
+                    body: str                       
+        Returns:
+            Response (or None if subscription)
         """
         # Set up both options, depending on if request is a subscription
         stream_data = ""
@@ -107,7 +120,10 @@ class Braid(object):
                 value = json.dumps(value)
             else:
                 value = str(value)
-            set_header(header, value)
+            if header not in ['body', 'patches']:
+                set_header(header, value)
+            # for safety, rewrite in case we change the headers
+            data[header] = value
 
         if data.get("patches", None):
             patches = generate_patch_stream_string(data["patches"])
@@ -118,9 +134,13 @@ class Braid(object):
         else:
             raise RuntimeError("No 'body' or 'patches' found in version response")
         if request.subscribe:
+            # prepare for next version
+            write_response("\r\n")
             subscription = self.subscriptions[subscriber_id(request)]
             subscription.push_to_stream(stream_data)
             # return nothing here due to stream
+            # TODO: should something relating to the stream be returned?
+            return None
         else:
             return response
         
