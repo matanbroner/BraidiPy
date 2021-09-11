@@ -10,3 +10,7 @@ A simple implementation of <a href="https://braid.org/">Braid</a> for HTTP state
     <b>[09/09/2021]</b></br>
     Flask lifecycle experiments, successfully sending patches which braidify.js client can read
 </p>
+<p>
+    <b>[09/10/2021]</b></br>
+    BraidiPy server basic functionality implemented, braidify.js client can read and write
+</p>
