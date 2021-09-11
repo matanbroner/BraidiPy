@@ -51,7 +51,7 @@ class Braid(object):
             setattr(request, "parents", parents)
             setattr(request, "peer", peer)
             setattr(request, "subscribe", subscribe)
-            setattr(request, "updated_version_response", self.updated_version_response)
+            setattr(request, "update_version", self.update_version)
             if request.method == "GET":
                 if request.subscribe:
                     # Store new subscription
@@ -104,12 +104,9 @@ class Braid(object):
 
         self.app.after_request(after_request)
 
-    def updated_version_response(self, data):
+    def update_version(self, data):
         """
         Returns an updated version of resource
-        Depending on if request is a subscription request, either
-        static Response is returned or existing subscription will queue initial
-        version to yield.
         Accepts:
             data: dict
                 Keys:
@@ -119,7 +116,7 @@ class Braid(object):
                     patches: list[Patch]
                     body: str
         Returns:
-            Response (or None if subscription)
+            Respons
         """
         # Set up both options, depending on if request is a subscription
         stream_data = ""
@@ -166,11 +163,8 @@ class Braid(object):
             write_response("\r\n")
             subscription = self.subscriptions[subscriber_id(request)]
             subscription.push_to_stream(stream_data)
-            # return nothing here due to stream
             # TODO: should something relating to the stream be returned?
-            return None
-        else:
-            return response
+        return response
 
 
             

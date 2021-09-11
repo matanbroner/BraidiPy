@@ -41,14 +41,14 @@ def get_post(id: str):
     # return current version of resouce, Braid has no
     # way of knowing how to fetch it. 
     # TODO: implement an optional way for Braid to fetch resource
-    version = request.updated_version_response({
+    version = request.update_version({
         "version": len(posts.keys()),
         "body": posts[id]
     })
     # TODO: find a better way to do this
     # The user should not be tasked with returning a version
     if request.subscribe:
-        # version is None, stream returns a custom Response
+        # do not return a version, rather return a stream of updates
         return request.subscription_stream()
     else:
         return version

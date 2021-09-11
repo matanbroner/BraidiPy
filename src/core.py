@@ -118,8 +118,10 @@ def parse_patches():
                 # end of stream
                 break
             buffer += chunk.decode('utf-8')
-            if len(patches) != num_patches:
-                # parse a [potentially] complete patch
+            # buffer is sliced after each patch is parsed
+            # read while buffer is not empty (ie. patches still exist)
+            while len(buffer) > 0:
+                # parse a potentially complete patch
                 # first figure out if we have all the patch's headers
                 dbl_newlines = list(re.finditer(r"(\r?\n)(\r?\n)", buffer))
                 # len(dbl_newlines) should be 1 == end of headers

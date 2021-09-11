@@ -32,7 +32,7 @@ const options = {
     'Version': 5, // arbitrary
     'Content-Type': 'application/json',
     'Merge-Type': 'sync9',
-    'Content-Length': patch.length,
+    'Content-Length': patches.length,
     'Patches': 2 // only sending one patch
   }
 }
