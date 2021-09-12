@@ -9,9 +9,13 @@ class Patch(NamedTuple):
     """
     A Patch is a change to an HTTP resource
     """
+    version: str
     unit: str
     range: str
     content: str
+    parents: list
+    merge_type: str = "sync9"
+    content_type: str = "application/json"
 
     def __str__(self):
         # TODO: make this more readable and efficient
