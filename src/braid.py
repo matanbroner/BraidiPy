@@ -12,6 +12,7 @@ from core import (
     subscriber_id,
     generate_patch_stream_string,
     parse_patches,
+    advertise_patches,
     generate_articial_subscription_data,
 )
 
@@ -44,6 +45,7 @@ class Braid(object):
             version = request.headers.get("version")
             parents = request.headers.get("parents")
             peer = request.headers.get("peer")
+            # change to == "keep-alive" once braidify client doesn't auto set header to true
             subscribe = is_true(request.headers.get("subscribe", False))
 
             # Set variables as Request attributes
@@ -51,32 +53,36 @@ class Braid(object):
             setattr(request, "parents", parents)
             setattr(request, "peer", peer)
             setattr(request, "subscribe", subscribe)
-            setattr(request, "update_version", self.update_version)
+            setattr(request, "subscriptions", self.subscriptions)
+            setattr(request, "resource", self.current_version)
+
+            # TODO: add REST method handler functions
             if request.method == "GET":
                 if request.subscribe:
                     # Store new subscription
                     s_id = subscriber_id(request)
-                    subscription = Subscription(
-                        request, lambda: self.subscriptions.pop(s_id)
-                    )
-                    # TODO: delete this call, only for testing
-                    # generate_articial_subscription_data(subscription)
                     if s_id in self.subscriptions:
                         # Kill existing subscription and replace with new one
-                        print(
-                            "Warning: Subscription already exists for {}".format(s_id),
-                            file=sys.stderr,
-                        )
+                        # TODO: figure out if the protocol allows for a user
+                        # to subscribe to the same resource multiple times concurrently
                         self.subscriptions[s_id].close()
-                    else:
-                        # Kill existing subscription and replace with new one
-                        print("Subscription created for {}".format(s_id), file=sys.stderr)
+                    subscription = Subscription(
+                        request, s_id, lambda: self.subscriptions.pop(s_id)
+                    )
                     self.subscriptions[s_id] = subscription
-                    setattr(request, "subscription_stream", subscription.patch_stream)
+                    setattr(request, "subscription", subscription)
             elif request.method == "PUT":
                 patches = parse_patches()
-                # placeholder
                 setattr(request, "patches", patches)
+                # _patches allows user to control which patches are advertised
+                # TODO: Maybe not needed/productive to the protocol being used correctly?
+                setattr(
+                    request,
+                    "advertise_patches",
+                    lambda _patches: advertise_patches(
+                        self.subscriptions.values(), request.path, _patches
+                    ),
+                )
 
         self.app.before_request(before_request)
 
@@ -104,9 +110,11 @@ class Braid(object):
 
         self.app.after_request(after_request)
 
-    def update_version(self, data):
+    def current_version(self, data):
         """
-        Returns an updated version of resource
+        Returns an up to date version of a resource
+        Will return either a typical Flask Response or a
+        stream Response depending on the request's "subscribe" header
         Accepts:
             data: dict
                 Keys:
@@ -116,7 +124,7 @@ class Braid(object):
                     patches: list[Patch]
                     body: str
         Returns:
-            Respons
+            Response: Flask Response
         """
         # Set up both options, depending on if request is a subscription
         stream_data = ""
@@ -136,7 +144,7 @@ class Braid(object):
             if request.subscribe:
                 stream_data += data
             else:
-                response.data += data
+                response.data += str.encode(data)
 
         for header, value in data.items():
             if isinstance(value, list):
@@ -161,11 +169,7 @@ class Braid(object):
         if request.subscribe:
             # prepare for next version
             write_response("\r\n")
-            subscription = self.subscriptions[subscriber_id(request)]
-            subscription.push_to_stream(stream_data)
-            # TODO: should something relating to the stream be returned?
-        return response
-
-
-            
-        
+            request.subscription.append(stream_data)
+            return request.subscription.stream()
+        else:
+            return response

@@ -11,9 +11,9 @@ class Patch(NamedTuple):
     """
     version: str
     unit: str
-    range: str
     content: str
-    parents: list
+    range: str = "[-0:-0]"
+    parents: list = []
     merge_type: str = "sync9"
     content_type: str = "application/json"
 
@@ -28,18 +28,20 @@ class Patch(NamedTuple):
         return f"<Patch {self}>"
 
 class Subscription:
-    def __init__(self, request, closed_cb):
-        self.path = request.path
+    def __init__(self, request, s_id, closed_cb):
+        self.s_id = s_id
+        # can change later, resource ID can be decided by the user
+        self.resource = request.path
         self.send_queue = []
         self.active = True
         self.closed_cb = closed_cb
     
-    def patch_stream(self):
+    def stream(self):
         """
         Generator method to send patches
         Stays alive as long as the stream can yield successfully
         """
-        def stream():
+        def _stream():
             try:
                 # While client connected
                 # TODO: is this the best way to keep a conn. alive? Two while loops?
@@ -51,11 +53,12 @@ class Subscription:
                 # NOTE: the generator will never terminate until
                 # the client disconnects and a yield is invoked
                 # TODO: is a heartbeat necessary to avoid zombie streams?
+                # TODO: implement a way for subscriptions to have n minute lifetimes for renewals
             except GeneratorExit:
                 self.close()
-        return Response(stream_with_context(stream()))
+        return Response(stream_with_context(_stream()))
     
-    def push_to_stream(self, data: str):
+    def append(self, data: str):
         """
         Queue string data to be streamed to the client
         """
@@ -108,9 +111,10 @@ def parse_patches():
 
         TODO: allow patch types other than JSON ranges
         """
-        num_patches = int(request.headers.get("patches", None))
-        if num_patches is None:
-            raise RuntimeError("No 'patches' header found in request")
+        num_patches = int(request.headers.get("patches", -1))
+        if num_patches < 0:
+            # if no patches are specified, ignore
+            return
         buffer = ""
         patches = []
         if num_patches == 0:
@@ -158,6 +162,16 @@ def parse_patches():
         if len(patches) != num_patches:
             raise RuntimeError("Number of patches does not match number given in 'Patches' header")
         return patches
+
+def advertise_patches(subscriptions: list, resource: str, patches: list):
+    """
+    Advertise a resource update to all the subscribers
+    """
+    print(subscriptions, file=sys.stdout)
+    patches_str = generate_patch_stream_string(patches)
+    for subscription in subscriptions:
+        if subscription.resource == resource:
+            subscription.append(patches_str)
 
 
 """
