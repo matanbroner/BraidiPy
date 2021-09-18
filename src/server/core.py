@@ -1,10 +1,12 @@
 import sys
+import json
 import re
 from flask import request, Response, stream_with_context
 from typing import NamedTuple
 from textwrap import dedent
 
 # Core data structures
+
 
 class Patch(NamedTuple):
     """
@@ -96,25 +98,41 @@ class Version(NamedTuple):
             v_str += "\r\nContent-Type: {}".format(self.content_type)
         if self.patches:
             v_str += "\r\nPatches: {}".format(len(self.patches))
-        v_str += "\r\n\r\n"
-        if self.patches:
-            v_str += "".join(str(patch) for patch in self.patches)
-        else:
-            v_str += self.body
+        content = "".join(str(patch) for patch in self.patches) if self.patches else self.body
+        v_str += "\r\nContent-Length: {}".format(len(content))
+        v_str += f"\r\n\r\n{content}"
         return v_str
 
     def __repr__(self):
         return f"<Version id={self.version}>"
 
+    def is_valid_json(self):
+        """
+        Checks if the body or stringified patches is valid JSON
+        Returns:
+            bool
+        """
+        content = (
+            self.body
+            if self.patches is None
+            else "".join(str(patch) for patch in self.patches)
+        )
+        try:
+            json.loads(content)
+            return True
+        except ValueError:
+            return False
+
 
 class Subscription:
     """
-    A subscription is a stream of data that is sent to a subscribed client 
+    A subscription is a stream of data that is sent to a subscribed client
     When another client advertises a new version, the subscription is appended with
     the new version and all subscribers are notified.
 
     NOTE: currently a single subscription is allowed per request.path + request.remote_addr
     """
+
     def __init__(self, request, s_id, closed_cb):
         self.s_id = s_id
         # can change later, resource ID can be decided by the user

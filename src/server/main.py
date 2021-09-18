@@ -27,6 +27,19 @@ def heartbeat():
     return "OK"
 
 
+@app.route("/post/<id>", methods=["OPTIONS"])
+def options_post(id: str):
+    """
+    Braid options route informing client which methods can be given range requests
+    """
+    # 204 No Content
+    response = Response(status=204)
+    response.headers["Range-Request-Allow-Methods"] = "PATCH, PUT"
+    response.headers["Range-Request-Allow-Units"] = "json"
+    response.headers["Patches"] = "OK"
+    return response
+
+
 @app.route("/post/<id>", methods=["GET"])
 def get_post(id: str):
     """
@@ -39,9 +52,9 @@ def get_post(id: str):
     if request.subscribe:
         return request.subscription.stream()
     else:
-        # TODO: include version once CRDT is implemented
+        # TODO: include "real" version once CRDT is implemented, for now just return a hardcoded value
         version = request.create_version(
-            {"body": json.dumps(posts[id])}
+            {"version": "1", "body": json.dumps(posts[id])}
         )
 
         return version

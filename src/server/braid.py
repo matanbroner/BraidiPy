@@ -86,17 +86,12 @@ class Braid(object):
     def setup_after_request(self):
         """
         Setup after request function
-        Assumes GET request
         """
 
         def after_request(response):
             """
             Setup after request function
-            """
-            # Setup patching and JSON ranges headers
-            response.headers["Range-Request-Allow-Methods"] = "PATCH, PUT"
-            response.headers["Range-Request-Allow-Units"] = "json"
-            response.headers["Patches"] = "OK"
+            """        
             # for a new subscription only
             if request.subscribe and request.method == "GET":
                 response.status_code = 209
@@ -157,4 +152,7 @@ class Braid(object):
             # prepare for next version
             subscription.append(str(version))
         else:
-            return Response(str(version), status=200)
+            response = Response(str(version), status=200)
+            if version.is_valid_json():
+                response.headers["Content-Type"] = "application/json"
+            return response
