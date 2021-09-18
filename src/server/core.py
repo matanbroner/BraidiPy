@@ -52,7 +52,7 @@ class Patch(NamedTuple):
         if self.content_type:
             p_str += "\r\nContent-Type: {}".format(self.content_type)
         if self.content_range:
-            p_str += "\r\nContent-Range: {}".format(self.content_range)
+            p_str += "\r\nContent-Range: {} {}".format(self.content_range[0], self.content_range[1])
         p_str += "\r\n\r\n{}".format(self.content)
         return p_str
 
