@@ -7,7 +7,7 @@ let http = require("http");
 let braidify = require("braidify").http(http);
 
 function test_get() {
-  braidify.get("http://localhost:8080/post/1", { subscribe: "keep-alive" }, (res) => {
+  braidify.get("http://localhost:8080/post/1", {  }, (res) => {
     res.on("error", (err) => {
       console.error(err);
     });

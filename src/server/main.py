@@ -39,8 +39,9 @@ def get_post(id: str):
     if request.subscribe:
         return request.subscription.stream()
     else:
+        # TODO: include version once CRDT is implemented
         version = request.create_version(
-            {"version": posts[id]["version"], "body": posts[id]}
+            {"body": json.dumps(posts[id])}
         )
 
         return version

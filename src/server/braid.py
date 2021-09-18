@@ -93,7 +93,6 @@ class Braid(object):
             """
             Setup after request function
             """
-            print("after_request")
             # Setup patching and JSON ranges headers
             response.headers["Range-Request-Allow-Methods"] = "PATCH, PUT"
             response.headers["Range-Request-Allow-Units"] = "json"
@@ -143,7 +142,7 @@ class Braid(object):
         )
         return new_version
 
-    def create_version(self, data, subscription: Subscription):
+    def create_version(self, data, subscription: Subscription=None):
         """
         Create a new version of a resource and forward it depending on the request type
         returns: Flask.Response or None (write to stream)
@@ -154,7 +153,6 @@ class Braid(object):
             if "patches" not in data and "body" not in data:
                 raise ValueError("No 'patches' or 'body' provided in new version data")
             version = Version(**data)
-        print(version)
         if subscription:
             # prepare for next version
             subscription.append(str(version))
