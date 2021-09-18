@@ -8,11 +8,11 @@ import json
 from flask import request, Response
 from core import (
     Subscription,
+    Version,
     is_true,
     subscriber_id,
     generate_patch_stream_string,
     parse_patches,
-    advertise_patches,
     generate_articial_subscription_data,
 )
 
@@ -54,7 +54,7 @@ class Braid(object):
             setattr(request, "peer", peer)
             setattr(request, "subscribe", subscribe)
             setattr(request, "subscriptions", self.subscriptions)
-            setattr(request, "resource", self.current_version)
+            setattr(request, "create_version", self.create_version)
 
             # TODO: add REST method handler functions
             if request.method == "GET":
@@ -72,16 +72,13 @@ class Braid(object):
                     self.subscriptions[s_id] = subscription
                     setattr(request, "subscription", subscription)
             elif request.method == "PUT":
-                patches = parse_patches()
-                setattr(request, "patches", patches)
+                version = self.version_from_request()
+                if version:
+                    setattr(request, "version", version)
                 # _patches allows user to control which patches are advertised
                 # TODO: Maybe not needed/productive to the protocol being used correctly?
                 setattr(
-                    request,
-                    "advertise_patches",
-                    lambda _patches: advertise_patches(
-                        self.subscriptions.values(), request.path, _patches
-                    ),
+                    request, "advertise_version", lambda v: self.advertise_version(v)
                 )
 
         self.app.before_request(before_request)
@@ -96,6 +93,7 @@ class Braid(object):
             """
             Setup after request function
             """
+            print("after_request")
             # Setup patching and JSON ranges headers
             response.headers["Range-Request-Allow-Methods"] = "PATCH, PUT"
             response.headers["Range-Request-Allow-Units"] = "json"
@@ -110,66 +108,55 @@ class Braid(object):
 
         self.app.after_request(after_request)
 
-    def current_version(self, data):
+    def advertise_version(self, version: list):
         """
-        Returns an up to date version of a resource
-        Will return either a typical Flask Response or a
-        stream Response depending on the request's "subscribe" header
-        Accepts:
-            data: dict
-                Keys:
-                    version: str
-                    parents: list[Patch]
-                    peer: str
-                    patches: list[Patch]
-                    body: str
-        Returns:
-            Response: Flask Response
+        Advertise a resource update to all the subscribers of a resource
         """
-        # Set up both options, depending on if request is a subscription
-        stream_data = ""
-        response = Response("", status=200)
+        for subscription in self.subscriptions.values():
+            if subscription.resource == request.path:
+                self.create_version(
+                    version,
+                    subscription,
+                )
 
-        def set_header(header, value):
-            nonlocal stream_data
-            nonlocal response
-            if request.subscribe:
-                stream_data += "{}: {}\r\n".format(header, value)
-            else:
-                response.headers[header] = value
+    def version_from_request(self):
+        """
+        Extract version metadata and body from request
+        """
+        version = request.headers.get("Version")
+        if version is None:
+            return
+        parents = request.headers.get("Parents")
+        if parents:
+            parents = parents.split(",")
+        content_type = request.headers.get("Content-Type")
+        merge_type = request.headers.get("Merge-Type")
+        patches = parse_patches()
+        body = request.data if patches is None else None
+        new_version = Version(
+            version=version,
+            parents=parents,
+            content_type=content_type,
+            merge_type=merge_type,
+            body=body,
+            patches=patches,
+        )
+        return new_version
 
-        def write_response(data):
-            nonlocal stream_data
-            nonlocal response
-            if request.subscribe:
-                stream_data += data
-            else:
-                response.data += str.encode(data)
-
-        for header, value in data.items():
-            if isinstance(value, list):
-                value = ",".join(value)
-            elif isinstance(value, dict):
-                value = json.dumps(value)
-            else:
-                value = str(value)
-            if header not in ["body", "patches"]:
-                set_header(header, value)
-            # for safety, rewrite in case we change the headers
-            data[header] = value
-
-        if data.get("patches", None):
-            patches = generate_patch_stream_string(data["patches"])
-            write_response(patches)
-        elif data.get("body"):
-            set_header("Content-Length", len(data["body"]))
-            write_response("\r\n{}\r\n".format(data["body"]))
-        else:
-            raise RuntimeError("No 'body' or 'patches' found in version response")
-        if request.subscribe:
+    def create_version(self, data, subscription: Subscription):
+        """
+        Create a new version of a resource and forward it depending on the request type
+        returns: Flask.Response or None (write to stream)
+        """
+        if isinstance(data, Version):
+            version = data
+        elif isinstance(data, dict):
+            if "patches" not in data and "body" not in data:
+                raise ValueError("No 'patches' or 'body' provided in new version data")
+            version = Version(**data)
+        print(version)
+        if subscription:
             # prepare for next version
-            write_response("\r\n")
-            request.subscription.append(stream_data)
-            return request.subscription.stream()
+            subscription.append(str(version))
         else:
-            return response
+            return Response(str(version), status=200)

@@ -4,28 +4,95 @@ from flask import request, Response, stream_with_context
 from typing import NamedTuple
 from textwrap import dedent
 
-# Core data structures
 class Patch(NamedTuple):
     """
-    A Patch is a change to an HTTP resource
+    A Patch is an update to an HTTP resource
     """
-    version: str
-    unit: str
     content: str
-    range: str = "[-0:-0]"
-    parents: list = []
-    merge_type: str = "sync9"
-    content_type: str = "application/json"
+    content_type: str = None
+    content_range: tuple = None
+
+    @classmethod
+    def list_from_buffer(cls, buffer: str) -> 'Patch':
+        """
+        Creates a list of Patches from a request buffer
+        """
+        patches = []
+        while len(buffer) > 0:
+            # find end of first patch's headers
+            dbl_newlines = list(re.finditer(r"(\r?\n)(\r?\n)", buffer))
+            if not len(dbl_newlines):
+                raise ValueError("Could not parse patches with no end of headers marker")
+            std_newline = "\r\n"
+            headers_length = dbl_newlines[0].end()
+            # now we can get the headers based on headers_length
+            # remove all whitespaces (ie. not headers)
+            headers = buffer[:headers_length].strip()
+            # parse the headers
+            headers = headers.split("\r\n")
+            headers = [header.split(": ") for header in headers]
+            headers = {header[0]: header[1] for header in headers}
+            if "Content-Length" not in headers:
+                raise ValueError("No 'Content-Length' header found in patch")
+            content_length = int(headers.get("Content-Length"))
+            if "Content-Range" in headers:
+                content_range = tuple(headers["Content-Range"].split(" "))
+            content_type = headers.get("Content-Type", None)
+            if not content_type and not content_range:
+                raise ValueError("No 'Content-Type' or 'Content-Range' header found in patch")
+            content = buffer[headers_length:headers_length + content_length + len(std_newline)].strip()
+            patches.append(cls(content, content_type, content_range))
+            # cut off the parsed patch from the buffer
+            buffer = buffer[headers_length + content_length + len(std_newline):]
+        
+        return patches
 
     def __str__(self):
-        # TODO: make this more readable and efficient
-        data = "\r\nContent-Length: {}".format(len(self.content))
-        data += f"\r\nContent-Range: {self.unit} {self.range}\r\n"
-        data += f"\r\n{self.content}\r\n"
-        return data
+        p_str = "Content-Length: {}".format(len(self.content))
+        if self.content_type:
+            p_str += "\r\nContent-Type: {}".format(self.content_type)
+        if self.content_range:
+            p_str += "\r\nContent-Range: {}".format(self.content_range)
+        p_str += "\r\n\r\n{}".format(self.content)
+        return p_str
 
     def __repr__(self):
-        return f"<Patch {self}>"
+        return "<Patch content_type={} content_range={}>".format(self.content_type, self.content_range)
+
+
+# Core data structures
+class Version(NamedTuple):
+    """
+    A Version is a series of patches or a string body 
+    describing the state of an HTTP resource
+    """
+    version: str
+    parents: list = None
+    merge_type: str = None
+    content_type: str = "application/json"
+    patches: list = None
+    body: str = ""
+
+    def __str__(self):
+        v_str = f"Version: {self.version}"
+        if self.parents:
+            v_str += "\r\nParents: {}".format(",".join(self.parents))
+        if self.merge_type:
+            v_str += "\r\nMerge-Type: {}".format(self.merge_type)
+        if self.content_type:
+            v_str += "\r\nContent-Type: {}".format(self.content_type)
+        if self.patches:
+            v_str += "\r\nPatches: {}".format(len(self.patches))
+        v_str += "\r\n\r\n"
+        if self.patches:
+            v_str += "".join(str(patch) for patch in self.patches)
+        else:
+            v_str += self.body
+        return v_str        
+
+    def __repr__(self):
+        return f"<Version id={self.version}>"
+
 
 class Subscription:
     def __init__(self, request, s_id, closed_cb):
@@ -108,8 +175,6 @@ def parse_patches():
         """
         Parse patches from request
         Flask will read the patches as an incoming stream
-
-        TODO: allow patch types other than JSON ranges
         """
         num_patches = int(request.headers.get("patches", -1))
         if num_patches < 0:
@@ -128,51 +193,10 @@ def parse_patches():
             buffer += chunk.decode('utf-8')
             # buffer is sliced after each patch is parsed
             # read while buffer is not empty (ie. patches still exist)
-            while len(buffer) > 0:
-                # parse a potentially complete patch
-                # first figure out if we have all the patch's headers
-                dbl_newlines = list(re.finditer(r"(\r?\n)(\r?\n)", buffer))
-                # len(dbl_newlines) should be 1 == end of headers
-                if not len(dbl_newlines):
-                    # headers not complete
-                    continue
-                # TODO: figure out if this assumption is valid
-                # Braidify JS checks the length of incoming newlines
-                std_newline = "\r\n"
-                headers_length = dbl_newlines[0].end()
-                # now we can get the headers based on headers_length
-                # remove all whitespaces (ie. not headers)
-                headers = buffer[:headers_length].strip()
-                # parse the headers
-                headers = headers.split("\r\n")
-                headers = [header.split(": ") for header in headers]
-                headers = {header[0]: header[1] for header in headers}
-                if "Content-Length" not in headers:
-                    raise RuntimeError("No 'Content-Length' header found in patch")
-                content_length = int(headers["Content-Length"])
-                if len(buffer) < headers_length + content_length + len(std_newline):
-                    # patch not complete, get next chunk and retry
-                    continue
-                unit, range = headers["Content-Range"].split(" ")
-                content = buffer[headers_length:headers_length + content_length + len(std_newline)].strip()
-                patch = Patch(unit, range, content)
-                patches.append(patch)
-                # cut off the parsed patch from the buffer
-                buffer = buffer[headers_length + content_length + len(std_newline):]
+        patches = Patch.list_from_buffer(buffer)
         if len(patches) != num_patches:
             raise RuntimeError("Number of patches does not match number given in 'Patches' header")
         return patches
-
-def advertise_patches(subscriptions: list, resource: str, patches: list):
-    """
-    Advertise a resource update to all the subscribers
-    """
-    print(subscriptions, file=sys.stdout)
-    patches_str = generate_patch_stream_string(patches)
-    for subscription in subscriptions:
-        if subscription.resource == resource:
-            subscription.append(patches_str)
-
 
 """
 Temporary functions for testing
@@ -192,3 +216,36 @@ def generate_articial_subscription_data(subscription):
             subscription.push_to_stream(sample_data)
     thread = threading.Thread(target=gen_data)
     thread.start()
+
+
+# while len(buffer) > 0:
+#                 # parse a potentially complete patch
+#                 # first figure out if we have all the patch's headers
+#                 dbl_newlines = list(re.finditer(r"(\r?\n)(\r?\n)", buffer))
+#                 # len(dbl_newlines) should be 1 == end of headers
+#                 if not len(dbl_newlines):
+#                     # headers not complete
+#                     continue
+#                 # TODO: figure out if this assumption is valid
+#                 # Braidify JS checks the length of incoming newlines
+#                 std_newline = "\r\n"
+#                 headers_length = dbl_newlines[0].end()
+#                 # now we can get the headers based on headers_length
+#                 # remove all whitespaces (ie. not headers)
+#                 headers = buffer[:headers_length].strip()
+#                 # parse the headers
+#                 headers = headers.split("\r\n")
+#                 headers = [header.split(": ") for header in headers]
+#                 headers = {header[0]: header[1] for header in headers}
+#                 if "Content-Length" not in headers:
+#                     raise RuntimeError("No 'Content-Length' header found in patch")
+#                 content_length = int(headers["Content-Length"])
+#                 if len(buffer) < headers_length + content_length + len(std_newline):
+#                     # patch not complete, get next chunk and retry
+#                     continue
+#                 unit, range = headers["Content-Range"].split(" ")
+#                 content = buffer[headers_length:headers_length + content_length + len(std_newline)].strip()
+#                 patch = Patch(unit, range, content)
+#                 patches.append(patch)
+#                 # cut off the parsed patch from the buffer
+#                 buffer = buffer[headers_length + content_length + len(std_newline):]

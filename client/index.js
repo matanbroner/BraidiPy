@@ -29,13 +29,14 @@ function test_put() {
     path: "/post/1",
     method: "PUT",
     headers: {
-      Client: 1, // make GUID
+      "Version": "3",
+      "Client": "1", // make GUID
       "Cache-Control": "no-cache, no-transform",
-      Version: 5, // arbitrary
       "Content-Type": "application/json",
       "Merge-Type": "sync9",
       "Content-Length": patches.length,
-      Patches: 2, // only sending one patch
+      "Patches": "2",
+      "Parents": "1, 2"
     },
   };
   let req = braidify.request(options, (res) => {
