@@ -1,11 +1,13 @@
+"""
+Core data structures
+"""
+
 import sys
 import json
 import re
 from flask import request, Response, stream_with_context
 from typing import NamedTuple
 from textwrap import dedent
-
-# Core data structures
 
 
 class Patch(NamedTuple):
