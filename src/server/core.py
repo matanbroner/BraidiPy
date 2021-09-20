@@ -157,12 +157,14 @@ class Subscription:
                     while len(self.send_queue) > 0:
                         data = self.send_queue.pop(0)
                         yield data
+                self.close()
                 # Exception thrown when client disconnects
                 # NOTE: the generator will never terminate until
                 # the client disconnects and a yield is invoked
                 # TODO: is a heartbeat necessary to avoid zombie streams?
                 # TODO: implement a way for subscriptions to have n minute lifetimes for renewals
             except GeneratorExit:
+                print("client disconnected", file=sys.stdout)
                 self.close()
 
         return Response(stream_with_context(_stream()))

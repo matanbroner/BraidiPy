@@ -45,8 +45,9 @@ class Braid(object):
             version = request.headers.get("version")
             parents = request.headers.get("parents")
             peer = request.headers.get("peer")
-            # change to == "keep-alive" once braidify client doesn't auto set header to true
-            subscribe = is_true(request.headers.get("subscribe", False))
+            # change to only == "keep-alive" once braidify client doesn't auto set header to true
+            # true as a value for the header is not part of the Braid spec
+            subscribe = is_true(request.headers.get("subscribe", False)) or request.headers.get("subscribe") == "keep-alive"
 
             # Set variables as Request attributes
             setattr(request, "version", version)

@@ -8,7 +8,7 @@ import threading
 
 
 class BraidClient:
-    def __init__(self, host: str = "localhost", port: int = 80, config: dict = None):
+    def __init__(self, host: str = "localhost", port: int = 8080, config: dict = None):
         self.active_subscriptions = {}
         self.host = host
         self.port = port
@@ -42,6 +42,7 @@ class BraidClient:
         if config is None:
             config = {}
         url = f"http://{self.host}:{self.port}{path}"
+        print(f"{method} {url}")
         if headers.get("subscribe") or headers.get("Subscribe"):
             if method != "GET":
                 raise ValueError("Subscription only supported for GET requests")
@@ -58,17 +59,25 @@ class BraidClient:
                 self._subscription_stream(path, headers, config)
 
     def _subscription_stream(self, path: str, headers: dict, config: dict):
+        print(f"Subscribing to {path}")
         buffer = ""
         path = path if path[0] == "/" else f"/{path}"
         url = f"http://{self.host}:{self.port}{path}"
-        r = requests.get(url, headers=headers, stream=True)
-        if r.status_code != 200:
-            raise ValueError(f"Subscription request for resource {path} failed with status code {r.status_code}")
-        while self.active_subscriptions.get(path):
-            for line in r.iter_lines(decode_unicode=True):
-                if line:
-                    buffer += line
-                    print(buffer)
+        try:
+            with requests.get(url, headers=headers, stream=True) as r:
+                print(f"Subscription stream started for {path}")
+                if r.status_code < 200 or r.status_code >= 300:
+                    raise ValueError(f"Subscription request for resource {path} failed with status code {r.status_code}")
+                while self.active_subscriptions.get(path):
+                    for line in r.iter_lines():
+                        if line:
+                            print(line)
+                        else:
+                            print("No data")
+        except Exception as e:
+            print(e)
+        finally:
+            self.active_subscriptions.pop(path)
                 
     def cancel_subscription(self, path: str):
         if path in self.active_subscriptions:
